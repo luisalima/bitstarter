@@ -24,6 +24,7 @@ References:
 var fs = require('fs');
 var program = require('commander');
 var cheerio = require('cheerio');
+var rest = require('restler');
 var HTMLFILE_DEFAULT = "index.html";
 var CHECKSFILE_DEFAULT = "checks.json";
 
@@ -61,14 +62,41 @@ var clone = function(fn) {
     return fn.bind({});
 };
 
+var executeGrader = function(file, checks) {
+    var checkJson = checkHtmlFile(file, checks);
+    var outJson = JSON.stringify(checkJson, null, 4);
+    console.log(outJson);
+}
+
 if(require.main == module) {
     program
         .option('-c, --checks <check_file>', 'Path to checks.json', clone(assertFileExists), CHECKSFILE_DEFAULT)
         .option('-f, --file <html_file>', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
+        .option('-u, --url <url>', 'URL')
         .parse(process.argv);
-    var checkJson = checkHtmlFile(program.file, program.checks);
-    var outJson = JSON.stringify(checkJson, null, 4);
-    console.log(outJson);
+    if(program.url) {
+        var url = program.url;
+        console.log(url);
+        rest.get(url).on('complete', function(result, response) {
+            if (result instanceof Error) {
+                console.error('Error: ' + util.format(response.message));
+                exit(1);
+            } else {
+                // note that this is executed on COMPLETE of the URL.
+                // Which means that if there is code after this else,
+                // it might get executed before this completes. So I
+                // added an "executeGrader" and it must be called on
+                // each branch of the if/else... is there a better way?
+                var file = "./urloutput.html";
+                fs.writeFileSync(file, result);
+                executeGrader(file, program.checks);
+            }
+        });
+    } else {
+        var file = program.file;
+        executeGrader(file, program.checks);
+    }
+
 } else {
     exports.checkHtmlFile = checkHtmlFile;
 }
